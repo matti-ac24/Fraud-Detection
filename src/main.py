@@ -53,7 +53,6 @@ logistic_model = LogisticRegression(random_state=42, class_weight='balanced', ma
 logistic_model.fit(X_train_resampled, Y_train_resampled)
 
 # Hyperparameter Tuning for Random Forest
-rf_model = RandomForestClassifier(random_state=42, class_weight='balanced')
 param_dist = {
     'n_estimators': [50, 100, 200],
     'max_depth': [None, 10, 20, 30],
@@ -63,53 +62,26 @@ param_dist = {
 }
 
 rf_random_search = RandomizedSearchCV(
-    estimator=rf_model,
+    estimator=RandomForestClassifier(random_state=42, class_weight='balanced'),
     param_distributions=param_dist,
-    n_iter=10,
-    scoring='average_precision',
-    cv=3,
+    n_iter=10,  # Reduced iterations for faster execution
+    scoring='average_precision',  # AUPRC as the evaluation metric
+    cv=3,  # 3-fold cross-validation
     verbose=2,
     random_state=42,
-    n_jobs=-1
+    n_jobs=-1  # Use all available processors
 )
 
+print("Starting RandomizedSearchCV for Random Forest...")
 rf_random_search.fit(X_train_resampled, Y_train_resampled)
+
+# Print the best parameters and best score
+print("\nBest Parameters from RandomizedSearchCV:")
+print(rf_random_search.best_params_)
+print(f"Best AUPRC: {rf_random_search.best_score_:.4f}")
 
 # Best Random Forest Model
 best_rf_model = rf_random_search.best_estimator_
-
-# Evaluate Models
-models = {
-    "Logistic Regression": logistic_model,
-    "Random Forest (Tuned)": best_rf_model
-}
-
-for model_name, model in models.items():
-    # Predictions
-    Y_pred = model.predict(X_test)
-    Y_proba = model.predict_proba(X_test)[:, 1]  # Predicted probabilities for the positive class
-
-    # Metrics
-    roc_auc = roc_auc_score(Y_test, Y_proba)
-    precision, recall, _ = precision_recall_curve(Y_test, Y_proba)
-    auprc = average_precision_score(Y_test, Y_proba)
-
-    print(f"\n{model_name}")
-    print("Classification Report:")
-    print(classification_report(Y_test, Y_pred))
-    print(f"ROC-AUC: {roc_auc:.4f}")
-    print(f"AUPRC: {auprc:.4f}")
-
-    # Plot Precision-Recall Curve
-    plt.figure(figsize=(8, 6))
-    plt.plot(recall, precision, label=f"{model_name} (AUPRC = {auprc:.4f})")
-    plt.xlabel("Recall")
-    plt.ylabel("Precision")
-    plt.title(f"Precision-Recall Curve: {model_name}")
-    plt.legend()
-    plt.grid()
-    plt.savefig(f"Plots/{model_name.replace(' ', '_')}_PR_Curve.png")
-    plt.show()
 
 # Feature Importance Analysis for Random Forest
 if hasattr(best_rf_model, "feature_importances_"):
@@ -134,3 +106,45 @@ if hasattr(best_rf_model, "feature_importances_"):
 
     print("\nTop 5 Most Important Features:")
     print(importance_df.head())
+
+# Evaluate Models
+models = {
+    "Logistic Regression": logistic_model,
+    "Random Forest (Tuned)": best_rf_model
+}
+
+plt.figure(figsize=(10, 8)) # create new plot for combined PR curve
+
+for model_name, model in models.items():
+    # Predictions
+    Y_pred = model.predict(X_test)
+    Y_proba = model.predict_proba(X_test)[:, 1]  # Predicted probabilities for the positive class
+
+    # Metrics
+    roc_auc = roc_auc_score(Y_test, Y_proba)
+    precision, recall, _ = precision_recall_curve(Y_test, Y_proba)
+    auprc = average_precision_score(Y_test, Y_proba)
+
+    print(f"\n{model_name}")
+    print("Classification Report:")
+    print(classification_report(Y_test, Y_pred))
+    print(f"ROC-AUC: {roc_auc:.4f}")
+    print(f"AUPRC: {auprc:.4f}")
+
+    # Plot Precision-Recall Curve
+    plt.plot(recall, precision, label=f"{model_name} (AUPRC = {auprc:.4f})")
+
+plt.xlabel("Recall")
+plt.ylabel("Precision")
+plt.title("Precision-Recall Curve: Logistic Regression & Random Forest")
+plt.legend()
+plt.grid()
+
+# Delete the old single Logistic Regression plot if it exists
+logistic_curve_path = "Plots/Logistic_Regression_PR_Curve.png"
+if os.path.exists(logistic_curve_path):
+    os.remove(logistic_curve_path)
+
+# Save only the final combined plot
+plt.savefig("Plots/Logistic_Regression_Random_Forest_PR_Curve.png")
+plt.show()
